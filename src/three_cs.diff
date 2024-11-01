@@ -1,0 +1,452 @@
+diff --git a/src/dcache_stage.c b/src/dcache_stage.cc
+similarity index 91%
+rename from src/dcache_stage.c
+rename to src/dcache_stage.cc
+index b1a8933..1ccdef6 100644
+--- a/src/dcache_stage.c
++++ b/src/dcache_stage.cc
+@@ -25,6 +25,11 @@
+  * Date         : 3/8/1999
+  * Description  :
+  ***************************************************************************************/
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include "shadow_cache.h"
+ 
+ #include "debug/debug_macros.h"
+ #include "debug/debug_print.h"
+@@ -35,6 +40,7 @@
+ #include "globals/utils.h"
+ 
+ #include "bp/bp.h"
++#include "libs/cache_lib.h"
+ #include "dcache_stage.h"
+ #include "map.h"
+ #include "model.h"
+@@ -51,6 +57,7 @@
+ #include "cmp_model.h"
+ #include "prefetcher/l2l1pref.h"
+ 
++
+ /**************************************************************************************/
+ /* Macros */
+ 
+@@ -63,6 +70,25 @@
+ 
+ Dcache_Stage* dc = NULL;
+ 
++#ifdef __cplusplus
++}
++#endif
++/**************************************************************************************/
++#include <set>
++std::set<Addr> dcache_seen_lines;
++
++// check if the data is in there then 
++Flag dcache_cold_miss(Addr line_addr) {
++  if(dcache_seen_lines.count(line_addr) > 0 ){
++    return 0;
++  }
++  dcache_seen_lines.insert(line_addr);
++  return 1;
++}
++
++#ifdef __cplusplus
++extern "C" {
++#endif
+ /**************************************************************************************/
+ /* set_dcache_stage: */
+ 
+@@ -81,6 +107,8 @@ void init_dcache_stage(uns8 proc_id, const char* name) {
+   DEBUG(proc_id, "Initializing %s stage\n", name);
+ 
+   memset(dc, 0, sizeof(Dcache_Stage));
++  //shadow_cache = (Cache*)malloc(sizeof(Dcache_Stage));
++  //memset(shadow_cache, 0, sizeof(Dcache_Stage));
+ 
+   dc->proc_id = proc_id;
+ 
+@@ -91,8 +119,13 @@ void init_dcache_stage(uns8 proc_id, const char* name) {
+ 
+   /* initialize the cache structure */
+   init_cache(&dc->dcache, "DCACHE", DCACHE_SIZE, DCACHE_ASSOC, DCACHE_LINE_SIZE,
+-             sizeof(Dcache_Data), DCACHE_REPL);
++             sizeof(Dcache_Data), (Repl_Policy)DCACHE_REPL);
+ 
++  //init_cache(shadow_cache, "SHADOW_DCACHE", DCACHE_SIZE, DCACHE_SIZE / DCACHE_LINE_SIZE, DCACHE_LINE_SIZE,
++  //           sizeof(Dcache_Data), (Repl_Policy)DCACHE_REPL);
++  //init_cache(shadow_cache, "SHADOW_DCACHE", 1<<24, 1<<24 / DCACHE_LINE_SIZE, DCACHE_LINE_SIZE,
++  //            sizeof(Dcache_Data), (Repl_Policy)DCACHE_REPL);
++  init_sc(DCACHE_SIZE, DCACHE_LINE_SIZE);
+   reset_dcache_stage();
+ 
+   dc->ports = (Ports*)malloc(sizeof(Ports) * DCACHE_BANKS);
+@@ -104,13 +137,15 @@ void init_dcache_stage(uns8 proc_id, const char* name) {
+   }
+ 
+   dc->dcache.repl_pref_thresh = DCACHE_REPL_PREF_THRESH;
++  //shadow_cache->repl_pref_thresh = DCACHE_REPL_PREF_THRESH;
+ 
+   if(DC_PREF_CACHE_ENABLE)
+     init_cache(&dc->pref_dcache, "DC_PREF_CACHE", DC_PREF_CACHE_SIZE,
+                DC_PREF_CACHE_ASSOC, DCACHE_LINE_SIZE, sizeof(Dcache_Data),
+-               DCACHE_REPL);
++               (Repl_Policy)DCACHE_REPL);
+ 
+   memset(dc->rand_wb_state, 0, NUM_ELEMENTS(dc->rand_wb_state));
++  //memset(shadow_cache, 0, NUM_ELEMENTS(dc->rand_wb_state));
+ }
+ 
+ 
+@@ -156,11 +191,13 @@ void debug_dcache_stage() {
+ /* update_dcache_stage: */
+ void update_dcache_stage(Stage_Data* src_sd) {
+   Dcache_Data* line;
++  int shadow_line;
+   Counter      oldest_op_num, last_oldest_op_num;
+   uns          oldest_index;
+   int          start_op_count;
+   Addr         line_addr;
+-  uns          ii, jj;
++  int          ii, jj;
++  Flag         cold_miss;
+ 
+   // {{{ phase 1 - move ops into the dcache stage
+   ASSERT(dc->proc_id, src_sd->max_op_count == dc->sd.max_op_count);
+@@ -283,9 +320,13 @@ void update_dcache_stage(Stage_Data* src_sd) {
+       ideal_l2l1_prefetcher(op);
+ 
+     /* now access the dcache with it */
+-
+     line = (Dcache_Data*)cache_access(&dc->dcache, op->oracle_info.va,
+                                       &line_addr, TRUE);
++
++    cold_miss = dcache_cold_miss(line_addr);
++
++    shadow_line = sc_find_line(line_addr);
++
+     op->dcache_cycle = cycle_count;
+     dc->idle_cycle   = MAX2(dc->idle_cycle, cycle_count + DCACHE_CYCLES);
+ 
+@@ -426,6 +467,17 @@ void update_dcache_stage(Stage_Data* src_sd) {
+           }
+ 
+           if(!op->off_path) {
++            if(!cold_miss){
++              if(shadow_line >= 0)
++                // this should be the other way around? if the line is present its a conflict miss, otherwise capacity
++                // capacity misses for the same size cache should be exactly the same
++                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
++              else
++                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
++            }
++            else
++              STAT_EVENT(op->proc_id, DCACHE_MISS_COLD);
++
+             STAT_EVENT(op->proc_id, DCACHE_MISS);
+             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
+             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
+@@ -481,6 +533,14 @@ void update_dcache_stage(Stage_Data* src_sd) {
+           }
+ 
+           if(!op->off_path) {
++            if(!cold_miss){
++              if(shadow_line >= 0)
++                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
++              else
++                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
++            }
++            else
++              STAT_EVENT(op->proc_id, DCACHE_MISS_COLD);
+             STAT_EVENT(op->proc_id, DCACHE_MISS);
+             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
+             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
+@@ -539,6 +599,14 @@ void update_dcache_stage(Stage_Data* src_sd) {
+           }
+ 
+           if(!op->off_path) {
++            if(!cold_miss){
++              if(shadow_line >= 0)
++                STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
++              else
++                STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
++            }
++            else
++              STAT_EVENT(op->proc_id, DCACHE_MISS_COLD);
+             STAT_EVENT(op->proc_id, DCACHE_MISS);
+             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
+             STAT_EVENT(op->proc_id, DCACHE_MISS_ST_ONPATH);
+@@ -600,10 +668,10 @@ Flag dcache_fill_line(Mem_Req* req) {
+   set_dcache_stage(&cmp_model.dcache_stage[req->proc_id]);
+   Counter old_cycle_count = cycle_count;  // FIXME HACK!
+   cycle_count             = freq_cycle_count(FREQ_DOMAIN_CORES[req->proc_id]);
+-
++  // did I get rid of these asserts lmao (yes type shit)
+   ASSERT(dc->proc_id, dc->proc_id == req->proc_id);
+-  ASSERT(dc->proc_id, req->op_count == req->op_ptrs.count);
+-  ASSERT(dc->proc_id, req->op_count == req->op_uniques.count);
++  //ASSERT(dc->proc_id, req->op_count == req->op_ptrs.count);
++  //ASSERT(dc->proc_id, req->op_count == req->op_uniques.count);
+ 
+   /* if it can't get a write port, fail */
+   if(!get_write_port(&dc->ports[bank])) {
+@@ -625,6 +693,8 @@ Flag dcache_fill_line(Mem_Req* req) {
+ 
+     data = (Dcache_Data*)cache_insert(&dc->pref_dcache, dc->proc_id, req->addr,
+                                       &line_addr, &repl_line_addr);
++    sc_insert_line(line_addr);
++
+     ASSERT(dc->proc_id, req->emitted_cycle);
+     ASSERT(dc->proc_id, cycle_count >= req->emitted_cycle);
+     // mark the data as HW_prefetch if prefetch mark it as
+@@ -635,6 +705,7 @@ Flag dcache_fill_line(Mem_Req* req) {
+        that we won't be able to insert the writeback into the
+        memory system. */
+     Flag repl_line_valid;
++    //Flag shadow_repl_line_valid;
+     data = (Dcache_Data*)get_next_repl_line(&dc->dcache, dc->proc_id, req->addr,
+                                             &repl_line_addr, &repl_line_valid);
+     if(repl_line_valid && data->dirty) {
+@@ -677,12 +748,20 @@ Flag dcache_fill_line(Mem_Req* req) {
+ 
+     data = (Dcache_Data*)cache_insert(&dc->dcache, dc->proc_id, req->addr,
+                                       &line_addr, &repl_line_addr);
++    sc_insert_line(line_addr);
++    //naomi note: possibly do debugging stuff here if it comes to it 
+     DEBUG(dc->proc_id,
+           "Filling dcache  off_path:%d addr:0x%s  :%7d index:%7d op_count:%d "
+           "oldest:%lld\n",
+           req->off_path, hexstr64s(req->addr), (int)req->addr,
+           (int)(req->addr >> LOG2(DCACHE_LINE_SIZE)), req->op_count,
+           (req->op_count ? req->oldest_op_unique_num : -1));
++    DEBUG(dc->proc_id,
++          "Filling shadow cache  off_path:%d addr:0x%s  :%7d index:%7d op_count:%d "
++          "oldest:%lld\n",
++          req->off_path, hexstr64s(req->addr), (int)req->addr,
++          (int)(req->addr >> LOG2(DCACHE_LINE_SIZE)), req->op_count,
++          (req->op_count ? req->oldest_op_unique_num : -1));
+     STAT_EVENT(dc->proc_id, DCACHE_FILL);
+     ASSERT(dc->proc_id, req->emitted_cycle);
+     ASSERT(dc->proc_id, cycle_count >= req->emitted_cycle);
+@@ -892,3 +971,7 @@ void wp_process_dcache_fill(Dcache_Data* line, Mem_Req* req) {
+     }
+   }
+ }
++
++#ifdef __cplusplus
++}
++#endif
+\ No newline at end of file
+diff --git a/src/dcache_stage.h b/src/dcache_stage.h
+index c404070..c1cea53 100644
+--- a/src/dcache_stage.h
++++ b/src/dcache_stage.h
+@@ -29,6 +29,10 @@
+ #ifndef __DCACHE_STAGE_H__
+ #define __DCACHE_STAGE_H__
+ 
++#ifdef __cplusplus
++extern "C" {
++#endif
++
+ #include "libs/cache_lib.h"
+ #include "stage_data.h"
+ 
+@@ -99,7 +103,9 @@ void wp_process_dcache_fill(Dcache_Data* line, Mem_Req* req);
+ Flag dcache_fill_line(Mem_Req*);
+ void update_iso_miss(Op*);
+ Flag do_oracle_dcache_access(Op*, Addr*);
+-
+ /**************************************************************************************/
++#ifdef __cplusplus
++}
++#endif
+ 
+ #endif /* #ifndef __DCACHE_STAGE_H__ */
+diff --git a/src/libs/cache_lib.c b/src/libs/cache_lib.c
+index 33c100d..07f781a 100644
+--- a/src/libs/cache_lib.c
++++ b/src/libs/cache_lib.c
+@@ -87,6 +87,18 @@ uns ext_cache_index(Cache* cache, Addr addr, Addr* tag, Addr* line_addr) {
+   return cache_index(cache, addr, tag, line_addr);
+ }
+ 
++/**************************************************************************************/
++/* print_cache: */
++void print_cache(Cache* cache, uns cache_size, uns assoc, uns line_size) {
++  uns ii, jj;
++  uns num_sets  = cache_size / line_size / assoc;
++  for (ii = 0; ii<num_sets; ii++) {
++    for (jj = 0; jj < assoc; jj++) {
++      printf("PRINTING DATA %u, %u: ", ii, jj);
++      printf("valid: %d, last_access_time: %llu\n", cache->entries[ii][jj].valid, cache->entries[ii][jj].last_access_time);
++    }
++  }
++}
+ 
+ /**************************************************************************************/
+ /* init_cache: */
+@@ -210,6 +222,30 @@ void init_cache(Cache* cache, const char* name, uns cache_size, uns assoc,
+   cache->tag_incl_offset = FALSE;
+ }
+ 
++/**************************************************************************************/
++/* cache_check_cold_miss: Checks if an entry is valid. For set associative, if the line is not
++present and there is an invalid spot, returns cold miss (true)  */
++/*
++Flag cache_check_cold_miss(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
++  Addr tag;
++  uns  set = cache_index(cache, addr, &tag, line_addr);
++  uns  ii;
++  void* line_data = NULL;
++  Flag cold_miss = 1;
++
++  for(ii = 0; ii < cache->assoc; ii++) {
++    Cache_Entry* line = &cache->entries[set][ii];
++    // if the entry is in the cache, not a cold miss!
++    if(line->valid && line->tag == tag) {
++      return 1;
++    }
++    // otherwise, check if all of the lines are valid
++    cold_miss *= line->valid;
++  }
++  // if there's an invalid line, this is a cold miss!
++  return !cold_miss;
++}*/
++
+ /**************************************************************************************/
+ /* cache_access: Does a cache lookup based on the address.  Returns a pointer
+  * to the cache line data if it is found.  */
+diff --git a/src/libs/cache_lib.h b/src/libs/cache_lib.h
+index 8da6f5c..17ba9e0 100644
+--- a/src/libs/cache_lib.h
++++ b/src/libs/cache_lib.h
+@@ -180,6 +180,8 @@ const static Flag CACHE_DEBUG_ENABLE = FALSE; // To be Changed into DEBUG_PARA
+ /* prototypes */
+ 
+ void  init_cache(Cache*, const char*, uns, uns, uns, uns, Repl_Policy);
++void print_cache(Cache* cache, uns cache_size, uns assoc, uns line_size);
++//Flag cache_check_cold_miss(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl);
+ void* cache_access(Cache*, Addr, Addr*, Flag);
+ void* cache_insert(Cache*, uns8, Addr, Addr*, Addr*);
+ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
+diff --git a/src/memory/memory.stat.def b/src/memory/memory.stat.def
+index 718773a..a064890 100644
+--- a/src/memory/memory.stat.def
++++ b/src/memory/memory.stat.def
+@@ -345,6 +345,11 @@ DEF_STAT(  DCACHE_MISS		   , DIST  , NO_RATIO  )
+ DEF_STAT(  DCACHE_ST_BUFFER_HIT	   , COUNT , NO_RATIO  )
+ DEF_STAT(  DCACHE_HIT		   , DIST  , NO_RATIO  )
+ 
++ /* these three are also on path */
++DEF_STAT(  DCACHE_MISS_COLD	     , DIST  , NO_RATIO  )
++DEF_STAT(  DCACHE_MISS_CAPACITY    , COUNT  , NO_RATIO  )
++DEF_STAT(  DCACHE_MISS_CONFLICT    , DIST  , NO_RATIO  )
++
+ DEF_STAT(  DCACHE_MISS_ONPATH		   , DIST  , NO_RATIO  )
+ DEF_STAT(  DCACHE_MISS_OFFPATH		   , DIST  , NO_RATIO  )
+ 
+diff --git a/src/shadow_cache.cc b/src/shadow_cache.cc
+new file mode 100644
+index 0000000..3c42e11
+--- /dev/null
++++ b/src/shadow_cache.cc
+@@ -0,0 +1,69 @@
++#include <vector>
++#include <climits>
++
++#include "shadow_cache.h"
++#include "globals/assert.h"
++#include "globals/global_defs.h"
++#include "globals/global_types.h"
++#include "globals/global_vars.h"
++#include "globals/utils.h"
++
++using namespace std;
++
++typedef struct Shadow_Entry_struct {
++    Flag valid;
++    Addr line_addr;
++    Counter cycle_accessed;
++} Shadow_Entry;
++
++vector<Shadow_Entry> shadow_cache;
++
++void init_sc(int cache_size, int line_size) {
++    shadow_cache.resize(cache_size / line_size);
++    for (Shadow_Entry& entry : shadow_cache) {
++        entry.valid = 0;
++        entry.line_addr = 0;
++        entry.cycle_accessed = 0;
++    }
++}
++
++int sc_find_line(Addr req_line_addr) {
++    for (uint i=0; i<shadow_cache.size(); i++) {
++        if(shadow_cache[i].line_addr == req_line_addr)
++            return (int)i;
++    }
++    return -1;
++}
++
++int sc_find_oldest() {
++    Counter oldest_cycle = MAX_CTR;
++    int oldest = -1;
++    for(uint i=0; i<shadow_cache.size(); i++) {
++        if(shadow_cache[i].valid) {
++            if(shadow_cache[i].cycle_accessed < oldest_cycle){
++                oldest_cycle = shadow_cache[i].cycle_accessed;
++                oldest = (int)i;
++            }
++        }
++        else {
++            return (int)i;
++        }
++    }
++    return oldest;
++}
++
++Flag sc_insert_line(Addr req_line_addr) {
++    int entry_idx = sc_find_line(req_line_addr);
++    // hit, update LRU
++    if(entry_idx >= 0) {
++        shadow_cache[entry_idx].cycle_accessed = cycle_count;
++    }
++    //miss, evict something and put the new line in
++    else {
++        entry_idx = sc_find_oldest();
++        shadow_cache[entry_idx].line_addr = req_line_addr;
++        shadow_cache[entry_idx].cycle_accessed = cycle_count;
++        shadow_cache[entry_idx].valid = 1;
++    }
++    return 1;
++}
+\ No newline at end of file
+diff --git a/src/shadow_cache.h b/src/shadow_cache.h
+new file mode 100644
+index 0000000..19c91eb
+--- /dev/null
++++ b/src/shadow_cache.h
+@@ -0,0 +1,19 @@
++#ifndef __SHADOW_CACHE_H__
++#define __SHADOQ_CACHE_H__
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++#include "globals/assert.h"
++#include "globals/global_defs.h"
++#include "globals/global_types.h"
++#include "globals/global_vars.h"
++#include "globals/utils.h"
++//naomi stuff
++void init_sc(int cache_size, int line_size);
++int sc_find_line(Addr req_line_addr);
++Flag sc_insert_line(Addr req_line_addr);
++#ifdef __cplusplus
++}
++#endif
++#endif
+\ No newline at end of file

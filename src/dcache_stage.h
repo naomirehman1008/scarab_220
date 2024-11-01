@@ -29,6 +29,10 @@
 #ifndef __DCACHE_STAGE_H__
 #define __DCACHE_STAGE_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "libs/cache_lib.h"
 #include "stage_data.h"
 
@@ -99,7 +103,9 @@ void wp_process_dcache_fill(Dcache_Data* line, Mem_Req* req);
 Flag dcache_fill_line(Mem_Req*);
 void update_iso_miss(Op*);
 Flag do_oracle_dcache_access(Op*, Addr*);
-
 /**************************************************************************************/
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* #ifndef __DCACHE_STAGE_H__ */

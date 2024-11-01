@@ -87,6 +87,18 @@ uns ext_cache_index(Cache* cache, Addr addr, Addr* tag, Addr* line_addr) {
   return cache_index(cache, addr, tag, line_addr);
 }
 
+/**************************************************************************************/
+/* print_cache: */
+void print_cache(Cache* cache, uns cache_size, uns assoc, uns line_size) {
+  uns ii, jj;
+  uns num_sets  = cache_size / line_size / assoc;
+  for (ii = 0; ii<num_sets; ii++) {
+    for (jj = 0; jj < assoc; jj++) {
+      printf("PRINTING DATA %u, %u: ", ii, jj);
+      printf("valid: %d, last_access_time: %llu\n", cache->entries[ii][jj].valid, cache->entries[ii][jj].last_access_time);
+    }
+  }
+}
 
 /**************************************************************************************/
 /* init_cache: */
@@ -209,6 +221,30 @@ void init_cache(Cache* cache, const char* name, uns cache_size, uns assoc,
 
   cache->tag_incl_offset = FALSE;
 }
+
+/**************************************************************************************/
+/* cache_check_cold_miss: Checks if an entry is valid. For set associative, if the line is not
+present and there is an invalid spot, returns cold miss (true)  */
+/*
+Flag cache_check_cold_miss(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
+  Addr tag;
+  uns  set = cache_index(cache, addr, &tag, line_addr);
+  uns  ii;
+  void* line_data = NULL;
+  Flag cold_miss = 1;
+
+  for(ii = 0; ii < cache->assoc; ii++) {
+    Cache_Entry* line = &cache->entries[set][ii];
+    // if the entry is in the cache, not a cold miss!
+    if(line->valid && line->tag == tag) {
+      return 1;
+    }
+    // otherwise, check if all of the lines are valid
+    cold_miss *= line->valid;
+  }
+  // if there's an invalid line, this is a cold miss!
+  return !cold_miss;
+}*/
 
 /**************************************************************************************/
 /* cache_access: Does a cache lookup based on the address.  Returns a pointer
