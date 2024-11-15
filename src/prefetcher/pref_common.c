@@ -263,6 +263,8 @@ void pref_done(void) {
 }
 
 // FIXME LATER
+// called from dcache_stage.c for loads that miss 
+
 void pref_dl0_miss(Addr line_addr, Addr load_PC) {
   int ii;
   if(!PREF_FRAMEWORK_ON)
@@ -277,6 +279,8 @@ void pref_dl0_miss(Addr line_addr, Addr load_PC) {
 }
 
 // FIXME LATER
+// if a line hit in dcache and that line wasn't prefetched or
+// that line was prefetched but already hit
 void pref_dl0_hit(Addr line_addr, Addr load_PC) {
   int ii;
   if(!PREF_FRAMEWORK_ON)
@@ -291,6 +295,7 @@ void pref_dl0_hit(Addr line_addr, Addr load_PC) {
 }
 
 // FIXME LATER
+// if there was a dcache hit and the line was prefetched
 void pref_dl0_pref_hit(Addr line_addr, Addr load_PC, uns8 prefetcher_id) {
   int ii;
   if(!PREF_FRAMEWORK_ON)
@@ -306,6 +311,7 @@ void pref_dl0_pref_hit(Addr line_addr, Addr load_PC, uns8 prefetcher_id) {
     }
   }
 }
+
 
 void pref_umlc_miss(uns8 proc_id, Addr line_addr, Addr load_PC,
                     uns32 global_hist) {
