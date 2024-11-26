@@ -40,36 +40,46 @@ void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
   }
 }
 
-void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
-                       uns32 global_hist, int lru_position, uns8 prefetcher_id) {
-                       pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], proc_id, lineAddr, loadPC, FALSE, TRUE);
-                        // recent requests update 
-                       };
-
+// UMLC
 void pref_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist, int lru_position,
                         uns8 prefetcher_id) {
-                        pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], proc_id, lineAddr, loadPC, FALSE, TRUE);
-                        }
+  pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
+  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
+}
 
-void pref_bo_ul1_miss(uns8 proc_id, Addr lineAddr, Addr , uns32 global_hist) {
-  // to do 
-  // l2 prefetcher, don't do anything?
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], proc_id, lineAddr, loadPC, TRUE, FALSE);
-}
-void pref_bo_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  // to do 
-  // l2 prefetcher, don't do anything?
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], proc_id, lineAddr, loadPC, FALSE, FALSE);
-}
 void pref_bo_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   // to do
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], proc_id, lineAddr, loadPC, TRUE, FALSE);
+  pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
+  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
 }
+
 void pref_bo_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   // to do
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], proc_id, lineAddr, loadPC, FALSE, FALSE); 
+  pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
 }
+
+// UL1
+void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
+                        uns32 global_hist, int lru_position,
+                        uns8 prefetcher_id) {
+  pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
+  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, FALSE);
+}
+
+void pref_bo_ul1_miss(uns8 proc_id, Addr lineAddr, Addr , uns32 global_hist) {
+  pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
+  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, FALSE);
+}
+
+void pref_bo_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
+  pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
+}
+
+void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr lineAddr, Flag is_hit, Flag was_pref) {
+
+}
+
 
 void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr lineAddr, Flag is_hit, Flag was_pref) {
   int ii;
@@ -131,16 +141,36 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr lineAddr, Flag is
   if(bestoffset_hwp->throttle)
     return;
 
-  pref_addto_umlc_req_queue(proc_id, (lineAddr >> DCACHE_LINE_SIZE) + bestoffset_hwp->cur_offset, stride_hwp->hwp_info->id)
+  pref_addto_umlc_req_queue(proc_id, (lineAddr >> DCACHE_LINE_SIZE) + bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
 }
 
-pref_bo_insert_to_rr_table(Addr rr_idx, Addr lineAddr, BestOffset_RR_Table * rr_table) {
-  rr_table->entries[rr_idx]->lineAddr = lineAddr;
-  rr_table->entries[rr_idx]->cycle_accessed = cycle_count;
-  rr_table->entries[rr_idx]->valid = TRUE;
+void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr lineAddr, Flag is_umlc) {
+  if(bestoffset_hwp->throttle)
+    return;
+  if(is_umlc)
+    pref_addto_umlc_req_queue(proc_id, (lineAddr >> DCACHE_LINE_SIZE) + bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
+  else
+    pref_addto_ul1_req_queue(proc_id, (lineAddr >> DCACHE_LINE_SIZE) + bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
 }
 
-pref_bo_reset_scores(Pref_BO* bestoffset_hwp) {
+// line inserted into recent requests when prefetched line is inserted into UMLC 
+// these are sus, test these
+void pref_bo_umlc_pref_line_filled(uns proc_id, Addr line_addr) {
+  pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
+}
+
+void pref_bo_ul1_pref_line_filled(uns proc_id, Addr line_addr) {
+  pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
+}
+
+void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr) {
+  Addr rr_idx = ((lineAddr - bestoffset_hwp->cur_offset) >> LOG2(DCACHE_LINE_SIZE)) % PREF_BO_RR_TABLE_N;
+  bestoffset_hwp->rr_table->entries[rr_idx]->lineAddr = lineAddr;
+  bestoffset_hwp->rr_table->entries[rr_idx]->cycle_accessed = cycle_count;
+  bestoffset_hwp->rr_table->entries[rr_idx]->valid = TRUE;
+}
+
+void pref_bo_reset_scores(Pref_BO* bestoffset_hwp) {
   int* score;
   for (int ii=0; ii<bestoffset_hwp->num_offsets) {
     score = hash_table_access(bestoffset_hwp->score_table, bestoffset_hwp->offset_list[ii]);
