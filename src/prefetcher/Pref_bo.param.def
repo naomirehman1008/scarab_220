@@ -1,8 +1,13 @@
 DEF_PARAM(pref_bo_on,           PREF_BO_ON,             Flag,   Flag,   FALSE,)
 DEF_PARAM(debug_pref_bo,        DEBUG_PREF_BO,          Flag,   Flag,   FALSE,)
-//thesizeofthebotable
+
 DEF_PARAM(pref_bo_rr_table_n,   PREF_BO_RR_TABLE_N,     uns,    uns,    1024,)
 DEF_PARAM(pref_bo_score_table_n,PREF_BO_SCORE_TABLE_N,  uns,    uns,    52,)
 DEF_PARAM(pref_bo_max_rounds,   PREF_BO_MAX_ROUNDS,     uns,    uns,    52,)
 DEF_PARAM(pref_bo_max_score,    PREF_BO_MAX_SCORE,      uns,    uns,    52,)
 DEF_PARAM(pref_bo_bad_score,    PREF_BO_BAD_SCORE,      uns,    uns,    52,)
+
+// parameters for L0D prefetcher
+DEF_PARAM(pref_bo_l0d_pref_stream, PREF_BO_L0D_PREF_STREAM, Flag, Flag, TRUE, )
+// default stream delta 1
+DEF_PARAM(pref_bo_l0d_pref_stream_delta, PREF_BO_L0D_PREF_STREAM_DELTA, uns, uns, 1, )

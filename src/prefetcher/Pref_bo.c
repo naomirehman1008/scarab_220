@@ -1,34 +1,51 @@
 #include <stdlib.h>
 
-#include "Pref_bo.h"
+#include "pref_bo.h"
 #include "pref.param.def"
 #include "core.param.h"
 #include "statistics.h"
-#include "prefetcher//Pref_bo.param.def"
+#include "prefetcher/pref_bo.param.def"
 
 bestoffset_prefetchers bestoffset_prefetcher_array;
 int POTENTIAL_BOS_SIZE = 52;
+#define NUM_OFFSETS 52
 
-void init_pref_bo(HWP* hwp) {
+void pref_bo_init(HWP* hwp) {
+  if(!PREF_BO_ON) 
+    return;
+
+  // no prefetchers prefetch to the dcache??
+
   if(PREF_UMLC_ON) {
     bestoffset_prefetcher_array.bestoffset_hwp_core_umlc        = (Pref_BO*)malloc(sizeof(Pref_BO) * NUM_CORES);
     bestoffset_prefetcher_array.bestoffset_hwp_core_umlc->type  = UMLC;
-    init_bp(hwp, bestoffset_prefetcher_array.bestoffset_hwp_core_umlc);
+    init_bo_core(hwp, bestoffset_prefetcher_array.bestoffset_hwp_core_umlc);
   }
+  // I don't think we're prefetching to the UL1?
   if(PREF_UL1_ON){
     bestoffset_prefetcher_array.bestoffset_hwp_core_ul1        = (Pref_BO*)malloc(sizeof(Pref_BO) * NUM_CORES);
     bestoffset_prefetcher_array.bestoffset_hwp_core_ul1->type  = UL1;
-    init_bp(hwp, bestoffset_prefetcher_array.bestoffset_hwp_core_ul1);
+    init_bo_core(hwp, bestoffset_prefetcher_array.bestoffset_hwp_core_ul1);
   }
 }
 
-void init_pref_bo(HWP* hwp, Pref_BO* bp_hwp_core) {
+void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
   uns8 proc_id;
 
   for(proc_id = 0; proc_id < NUM_CORES; proc_id++) {
-    bp_hwp_core[proc_id].hwp_info     = hwp->hwp_info;
-    bp_hwp_core[proc_id].stride_table = (BestOffset_Table_Entry*)calloc(
-      PREF_BO_RR_TABLE_N, sizeof(BestOffset_Table_Entry));
+    bo_hwp_core[proc_id].hwp_info     = hwp->hwp_info;
+    bo_hwp_core[proc_id].num_offsets  = NUM_OFFSETS;
+    bo_hwp_core[proc_id].new_round    = TRUE;
+    bo_hwp_core[proc_id].round    = 0;
+    bo_hwp_core[proc_id].test_offset    = potentialBOs[0];
+    bo_hwp_core[proc_id].rr_table = (BO_RR_Table_Entry*)calloc(
+      PREF_BO_RR_TABLE_N, sizeof(BO_RR_Table_Entry));
+    bo_hwp_core[proc_id].score_table = (Hash_Table*)calloc(
+      1, sizeof(hash_table));
+    init_hash_table(bo_hwp_core[proc_id].score_table, "score_table", 
+      PREF_BO_SCORE_TABLE_N, sizeof(uns));
+    
+    
   }
 }
 
@@ -54,7 +71,6 @@ void pref_bo_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_his
 void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr lineAddr, Flag is_hit) {
   int ii;
   int best_offset_idx = -1;
-  bestoffset_hwp->potentialBOs = [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 25, 27, 30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80, 81, 90, 96, 100, 108, 120, 125, 128, 135, 144, 150, 160, 162, 180, 192, 200, 216, 225, 240, 243, 250, 256];
 
   Addr lineIndex = lineAddr >> LOG2(DCACHE_LINE_SIZE);
   BestOffset_RR_Table_Entry* entry = NULL;
@@ -172,6 +188,8 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr lineAddr, Flag is
   // Update the last address to the current line address.
   entry->last_addr = lineAddr;
 }
+
+void pref_bo_emit_prefetch()
 
 pref_bo_insert_to_rr_table(Addr rr_idx, Addr lineAddr, BestOffset_RR_Table * rr_table) {
   rr_table->entries[rr_idx]->lineAddr = lineAddr;

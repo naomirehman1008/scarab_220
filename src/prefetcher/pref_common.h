@@ -168,6 +168,7 @@ typedef struct HWP_Common_struct {
   uns phase;
 } HWP_Common;
 
+// no prefetchers are prefetching to the dcache???
 typedef enum {
   UMLC,
   UL1

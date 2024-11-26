@@ -10,7 +10,9 @@
 #define GET_INDEX(addr, num_entries) addr % num_entries
 #define GET_TAG(addr, num_entries, mask) (addr / num_entries) & mask
 
-typedef struct BestOffset_Table_Entry_Struct {
+uns * potentialBOs = [1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 25, 27, 30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80, 81, 90, 96, 100, 108, 120, 125, 128, 135, 144, 150, 160, 162, 180, 192, 200, 216, 225, 240, 243, 250, 256];
+
+typedef struct BO_Table_Entry_Struct {
   Flag trained;
   Flag valid;
 
@@ -23,31 +25,35 @@ typedef struct BestOffset_Table_Entry_Struct {
   Counter train_num;
   Counter pref_sent;
   Counter last_access;  // for lru
-} BestOffset_Table_Entry;
+} BO_Table_Entry;
 
 // may need more?
-typedef struct BestOffset_RR_Table_Entry_Struct {
+typedef struct BO_RR_Table_Entry_Struct {
   //maybe just to tag?
   Addr lineAddr;
   Counter cycle_accessed;
   Flag valid;
-} BestOffset_RR_Table_Entry;
+} BO_RR_Table_Entry;
 
-typedef struct Best_Offset_Struct {
+typedef struct BO_Struct {
+  int                     type;
   HWP_Info*               hwp_info;
-  BestOffset_Table_Entry* bo_table;
-  Hash_Table *            score_table;
+  // static stuff
   int                     num_offsets;
   uint *                  offsets;
+  CacheLevel              type;
+  // training stuff
+  Hash_Table *            score_table;
   Flag                    new_round; // are we starting a new round
   int                     round;    // what round are we on
   int                     test_offset;   // what offset are we testing
+  BO_RR_Table_Entry *     rr_table;
+  // prefetching
   int                     cur_offset; // what round are we using currently
-  CacheLevel              type;
-  BestOffset_Recent_Requests_Table_Entry * rr_table;
   int                     offset_idx;
-  int potentialBOs[52];
   Flag                    throttle;
+  // ???
+  int                     potentialBOs[52];
 } Pref_BO;
 
 typedef struct {
