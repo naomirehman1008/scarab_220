@@ -45,13 +45,13 @@ void pref_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist, int lru_position,
                         uns8 prefetcher_id) {
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
-  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
 }
 
 void pref_bo_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   // to do
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
-  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE);
 }
 
 void pref_bo_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
@@ -64,84 +64,66 @@ void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist, int lru_position,
                         uns8 prefetcher_id) {
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
-  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, FALSE);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
 }
 
 void pref_bo_ul1_miss(uns8 proc_id, Addr lineAddr, Addr , uns32 global_hist) {
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
-  pref_bo_learn(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, FALSE);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
 }
 
 void pref_bo_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE);
 }
 
-void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr lineAddr, Flag is_hit, Flag was_pref) {
-
-}
-
-
-void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr lineAddr, Flag is_hit, Flag was_pref) {
-  int ii;
-  int best_offset_idx = -1;
-
-  Addr lineIndex = lineAddr >> LOG2(DCACHE_LINE_SIZE);
-  BestOffset_RR_Table_Entry* entry = NULL;
-
-  int offset;
-
-  // STEP 1: RR update
-  // sus
-  if (is_hit && was_pref) {  // train on prefetches at are accessed w demand load
-    Addr rr_idx = ((lineAddr - bestoffset_hwp->cur_offset) >> LOG2(DCACHE_LINE_SIZE)) % PREF_BO_RR_TABLE_N;
-    pref_bo_insert_to_rr_table(rr_idx, line_addr, bestoffset_hwp->bo_table);
-  }
-  // STEP 2: Train score table
+void pref_bo_train(Pref_BO* bestoffset_hwp, uns8 proc_id, Addr line_addr, Flag is_hit, Flag was_pref) {
+  // Train score table
   // reset scores
-  if (bestoffset_hwp->new_round) {
-    bestoffset_hwp->new_round = FALSE;
+  if (bestoffset_hwp->new_phase) {
+    bestoffset_hwp->new_phase = FALSE;
+    bestoffset_hwp->offset_idx = 0;
+    bestoffset_hwp->round = 0;
     // reset score table
     pref_bo_reset_scores(bestoffset_hwp->score_table);
   }
 
   // Test current offset
-  Addr candidateLine = lineAddr - bestoffset_hwp->round_offset;
+  Addr candidateLine = line_addr - bestoffset_hwp->train_offset;
   if (pref_bo_access_rr(bestoffset_hwp, line_addr)) {
+    // if found increment score
     int * score = hash_lib_access(bestoffset_hwp->score_table, bestoffset_hwp->round_offset);
     (*score)++;
-  }
-
-  // check for max score
-  int best_score = 0;
-  int best_offset = 0;
-  // potential optimization just check score for current offset
-  for (int ii=0; ii<bestoffset_hwp->num_offsets; i++) {
-    int offset_i = bestoffset_hwp->offset_list[ii];
-    int * score = hash_lib_access(bestoffset_hwp->score_table, offset);
-    if (*score > best_score) {
-      best_score = *score;
-      best_offset = offset_i;
+    // if we reach maxscore use this as the new offset and start a new learning pphase
+    if((*score) >= PREF_BO_MAXSCORE){
+      bestoffset_hwp->cur_offset = best_offset;
+      bestoffset_hwp->new_phase = TRUE;
     }
   }
-  if(best_score >= MAXSCORE || bestoffset_hwp->round >= MAXROUND) {
-    bestoffset_hwp->cur_offset = best_offset;
+  // if we haven't crossed max score but we've reached the max rounds find best offset
+  if(bestoffset_hwp->new_phase == FALSE && bestoffset_hwp->round >= PREF_BO_MAXROUNDS) {
     new_round = TRUE;
+    // check for max score
+    int best_score = 0;
+    int best_offset = 0;
+    for (int ii=0; ii<bestoffset_hwp->num_offsets; i++) {
+      int offset_i = potentialBOs[ii];
+      int * score = hash_lib_access(bestoffset_hwp->score_table, offset);
+      if ((*score) > best_score) {
+        best_score = *score;
+        best_offset = offset_i;
+      }
+    }
+    bestoffset_hwp->cur_offset = best_offset;
     if(bestoffset_hwp->cur_offset < BADSCORE) {
       bestoffset_hwp->throttle = TRUE;
     }
   }
 
-  bestoffset_hwp->offset_idx++;
+  bestoffset_hwp->offset_idx = (bestoffset_hwp->offset_idx + 1) % POTENTIAL_BOS_SIZE;
   bestoffset_hwp->round_offset = bestoffset_hwp->offset_list[bestoffset_hwp->offset_idx]
   if(bestoffset_hwp->offset_idx + 1 == bestoffset_hwp->num_offsets) {
     bestoffset_hwp->round++;
   }
-
-  // STEP 3 emit prefetches
-  if(bestoffset_hwp->throttle)
-    return;
-
-  pref_addto_umlc_req_queue(proc_id, (lineAddr >> DCACHE_LINE_SIZE) + bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
 }
 
 void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr lineAddr, Flag is_umlc) {

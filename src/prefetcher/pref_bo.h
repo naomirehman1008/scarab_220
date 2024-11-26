@@ -44,9 +44,9 @@ typedef struct BO_Struct {
   CacheLevel              type;
   // training stuff
   Hash_Table *            score_table;
-  Flag                    new_round; // are we starting a new round
+  Flag                    new_phase; // are we starting a new round
   int                     round;    // what round are we on
-  int                     test_offset;   // what offset are we testing
+  int                     train_offset;   // what offset are we testing
   BO_RR_Table_Entry *     rr_table;
   // prefetching
   int                     cur_offset; // what round are we using currently
