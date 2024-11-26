@@ -34,9 +34,21 @@ void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
   uns8 proc_id;
 
   for(proc_id = 0; proc_id < NUM_CORES; proc_id++) {
-    bp_hwp_core[proc_id].hwp_info     = hwp->hwp_info;
-    bp_hwp_core[proc_id].stride_table = (BestOffset_Table_Entry*)calloc(
-      PREF_BO_RR_TABLE_N, sizeof(BestOffset_Table_Entry));
+    bo_hwp_core[proc_id].hwp_info     = hwp->hwp_info;
+    bo_hwp_core[proc_id].score_table  = (Hash_Table*)calloc(
+      1, sizeof(Hash_Table));
+    init_hash_table(bo_hwp_core[proc_id].score_table, "score_table", POTENTIAL_BOS_SIZE, sizeof(uns));
+    bo_hwp_core[proc_id].new_phase = TRUE;
+    bo_hwp_core[proc_id].round     = 0;
+    bo_hwp_core[proc_id].train_offset = potentialBOs[0];
+  
+    bo_hwp_core[proc_id].rr_table = (BO_RR_Table_Entry*)calloc(
+      PREF_BO_RR_TABLE_N, sizeof(BO_RR_Table_Entry));
+    bo_hwp_core[proc_id].cur_offset = potentialBOs[0];
+    bo_hwp_core[proc_id].offset_idx = 0;
+    // could play around with init on or off, prob won't have that much perf impact
+    bo_hwp_core[proc_id].throttle = FALSE;
+
   }
 }
 

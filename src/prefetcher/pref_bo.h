@@ -39,8 +39,6 @@ typedef struct BO_Struct {
   int                     type;
   HWP_Info*               hwp_info;
   // static stuff
-  int                     num_offsets;
-  uint *                  offsets;
   CacheLevel              type;
   // training stuff
   Hash_Table *            score_table;
@@ -52,8 +50,6 @@ typedef struct BO_Struct {
   int                     cur_offset; // what round are we using currently
   int                     offset_idx;
   Flag                    throttle;
-  // ???
-  int                     potentialBOs[52];
 } Pref_BO;
 
 typedef struct {
