@@ -235,6 +235,8 @@ DEF_STAT( PREF_ACC4_HT_HP                  , COUNT    ,     NO_RATIO)
 DEF_STAT( PREF_ACC4_HT_LP                  , COUNT    ,     NO_RATIO)
 DEF_STAT( PREF_ACC4_LT_HP                  , COUNT    ,     NO_RATIO)
 DEF_STAT( PREF_ACC4_LT_LP                  , DIST     ,     NO_RATIO)
+/* Best Offset Prefetcher*/
+DEF_STAT(BO_PREF_EMITTED, COUNT, NO_RATIO)
 
 /* FDIP Frontend Prefetcher */
 DEF_STAT(FDIP_DECIDE_PREF_ONPATH, COUNT, NO_RATIO)

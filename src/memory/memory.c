@@ -57,6 +57,8 @@
 #include "prefetcher/pref_common.h"
 #include "prefetcher/stream_pref.h"
 #include "prefetcher/fdip_new.h"
+#include "prefetcher/pref_bo.h"
+#include "prefetcher/pref_bo.param.h"
 #include "statistics.h"
 //#include "dram.h"
 //#include "dram.param.h"
@@ -2503,7 +2505,7 @@ static void mem_process_l1_fill_reqs() {
             (long int)(req - mem->req_buffer), Mem_Req_Type_str(req->type),
             hexstr64s(req->addr), req->size, mem_req_state_names[req->state]);
       if(l1_fill_line(req)) {
-        if(req->type == DFETCH && PREF_BO_ON)
+        if(req->type == MRT_DPRF && PREF_BO_ON)
           pref_bo_ul1_pref_line_filled(req->proc_id, req->addr);
         ASSERT(0, req->type != MRT_WB && req->type != MRT_WB_NODIRTY);
         if(CONSTANT_MEMORY_LATENCY)
@@ -2617,7 +2619,7 @@ static void mem_process_mlc_fill_reqs() {
             (long int)(req - mem->req_buffer), Mem_Req_Type_str(req->type),
             hexstr64s(req->addr), req->size, mem_req_state_names[req->state]);
       if(mlc_fill_line(req)) {
-        if(req->type == DFETCH && PREF_BO_ON)
+        if(req->type == MRT_DPRF && PREF_BO_ON)
           pref_bo_umlc_pref_line_filled(req->proc_id, req->addr);
         req->state     = MRS_FILL_DONE;
         req->rdy_cycle = cycle_count + 1;
