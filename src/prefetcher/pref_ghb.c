@@ -71,6 +71,7 @@
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_PREF_GHB, ##args)
 ghb_prefetchers ghb_prefetchers_array;
 void pref_ghb_init(HWP* hwp) {
+  STAT_EVENT(0, GHB_PREF_INIT);
   if(!PREF_GHB_ON)
     return;
 
@@ -88,6 +89,7 @@ void pref_ghb_init(HWP* hwp) {
 }
 
 void init_ghb_core(HWP* hwp,Pref_GHB* ghb_hwp_core) {
+  STAT_EVENT(0, GHB_PREF_INIT_CORE);
   int  ii;
   uns8 proc_id;
   for(proc_id = 0; proc_id < NUM_CORES; proc_id++) {
@@ -142,6 +144,7 @@ void pref_ghb_umlc_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
 
 void pref_ghb_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC,
                        uns32 global_hist) {
+  STAT_EVENT(proc_id, PREF_GHB_ULMC_MISS);            
   pref_ghb_train(&ghb_prefetchers_array.ghb_hwp_core_umlc[proc_id], proc_id, lineAddr, loadPC, FALSE);
 }
 

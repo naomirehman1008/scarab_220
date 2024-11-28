@@ -18,13 +18,18 @@
 #include "libs/list_lib.h"
 #include "memory/memory.h"
 #include "memory/memory.param.h"
+#include "prefetcher/pref_bo.h"
+#include "pref_bo.param.h"
 #include "prefetcher/l2l1pref.h"
 #include "prefetcher/pref.param.h"
 #include "prefetcher/pref_common.h"
 #include "statistics.h"
-#include "prefetcher/pref_bo.h"
-#include "pref_bo.param.h"
+
 #include "../libs/hash_lib.h"
+
+/**************************************************************************************/
+/* Macros */
+#define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_BO, ##args)
 
 bestoffset_prefetchers bestoffset_prefetcher_array;
 
@@ -32,11 +37,12 @@ int potentialBOs[] = {1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 25, 27
 int POTENTIAL_BOS_SIZE = 52; // should be 52
 
 void pref_bo_init(HWP* hwp) {
+  STAT_EVENT(0, BO_PREF_INIT);
   if(!PREF_BO_ON) 
     return;
 
   // no prefetchers prefetch to the dcache??
-
+  hwp->hwp_info->enabled = TRUE;
   if(PREF_UMLC_ON) {
     bestoffset_prefetcher_array.bestoffset_hwp_core_umlc        = (Pref_BO*)malloc(sizeof(Pref_BO) * NUM_CORES);
     bestoffset_prefetcher_array.bestoffset_hwp_core_umlc->type  = UMLC;
@@ -52,6 +58,7 @@ void pref_bo_init(HWP* hwp) {
 
 void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
   uns8 proc_id;
+  STAT_EVENT(0, BO_PREF_INIT_CORE);
 
   for(proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     bo_hwp_core[proc_id].hwp_info     = hwp->hwp_info;
@@ -75,34 +82,41 @@ void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
 // UMLC
 void pref_bo_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist) {
+  if(!PREF_UMLC_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
   // to do
+  if(!PREF_UMLC_ON) return;
+  STAT_EVENT(proc_id, PREF_BO_ULMC_MISS);
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 void pref_bo_umlc_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
   // to do
+  if(!PREF_UMLC_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
 }
 
 // UL1
 void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist) {
+  if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
 void pref_bo_ul1_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
+  if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
 void pref_bo_ul1_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
+  if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
 }
 
@@ -192,8 +206,9 @@ Flag pref_bo_access_rr(Pref_BO * bestoffset_hwp, Addr line_addr) {
 
 void pref_bo_reset_scores(Pref_BO* bestoffset_hwp) {
   int* score;
+  Flag new_entry;
   for (int ii=0; ii<POTENTIAL_BOS_SIZE; ii++) {
-    score = hash_table_access(bestoffset_hwp->score_table, potentialBOs[ii]);
+    score = hash_table_access_create(bestoffset_hwp->score_table, potentialBOs[ii], &new_entry);
     *score = 0;
   }
 }

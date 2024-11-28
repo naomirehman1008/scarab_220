@@ -299,6 +299,7 @@ void pref_stream_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC,
 void pref_stream_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC,
                           uns32 global_hist) {
   if(!PREF_UMLC_ON) return;
+  STAT_EVENT(proc_id, PREF_STREAM_UMLC_MISS);
   pref_stream_train(&stream_prefetchers_array.pref_stream_core_umlc[proc_id], proc_id, lineAddr, loadPC, global_hist, TRUE, TRUE);
 }
 
