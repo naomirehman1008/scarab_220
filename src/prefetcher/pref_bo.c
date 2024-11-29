@@ -84,7 +84,7 @@ void pref_bo_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist) {
   if(!PREF_UMLC_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, proc_id);
 }
 
 void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
@@ -92,7 +92,7 @@ void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_h
   if(!PREF_UMLC_ON) return;
   STAT_EVENT(proc_id, PREF_BO_ULMC_MISS);
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, proc_id);
 }
 
 void pref_bo_umlc_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
@@ -106,13 +106,13 @@ void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist) {
   if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, proc_id);
 }
 
 void pref_bo_ul1_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
   if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
-  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
+  pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, proc_id);
 }
 
 void pref_bo_ul1_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
@@ -120,7 +120,7 @@ void pref_bo_ul1_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_his
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
 }
 
-void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr) {
+void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
   // Train score table
   // reset scores
   if (bestoffset_hwp->new_phase) {
@@ -139,12 +139,14 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr) {
     (*score)++;
     // if we reach maxscore use this as the new offset and start a new learning pphase
     if((*score) >= PREF_BO_MAX_SCORE){
+      STAT_EVENT(proc_id, PREF_BO_END_ROUND_MAX_SCORE);
       bestoffset_hwp->cur_offset = bestoffset_hwp->train_offset;
       bestoffset_hwp->new_phase = TRUE;
     }
   }
   // if we haven't crossed max score but we've reached the max rounds find best offset
   if(bestoffset_hwp->new_phase == FALSE && bestoffset_hwp->round >= PREF_BO_MAX_ROUNDS) {
+    STAT_EVENT(proc_id, PREF_BO_END_ROUND_MAX_ROUNDS);
     bestoffset_hwp->new_phase = TRUE;
     // check for max score
     int best_score = 0;
@@ -158,7 +160,8 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr) {
       }
     }
     bestoffset_hwp->cur_offset = best_offset;
-    if(bestoffset_hwp->cur_offset < PREF_BO_BAD_SCORE) {
+    if(best_score < PREF_BO_BAD_SCORE) {
+      STAT_EVENT(proc_id, PREF_BO_THROTTLE_BAD_SCORE);
       bestoffset_hwp->throttle = TRUE;
     }
   }

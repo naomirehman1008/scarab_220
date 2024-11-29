@@ -73,7 +73,7 @@ void pref_bo_ul1_hit(uns8 proc_id, Addr line_addr, Addr loadPC,
 /*************************************************************/
 /* Internal Function */
 void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core);
-void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr);
+void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id);
 
 void pref_bo_umlc_pref_line_filled(uns proc_id, Addr line_addr);
 void pref_bo_ul1_pref_line_filled(uns proc_id, Addr line_addr);
