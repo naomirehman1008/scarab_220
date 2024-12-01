@@ -186,10 +186,12 @@ void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_uml
 // line inserted into recent requests when prefetched line is inserted into UMLC 
 // these are sus, test these
 void pref_bo_umlc_pref_line_filled(uns proc_id, Addr line_addr) {
+  if(!PREF_UMLC_ON) return;
   pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 void pref_bo_ul1_pref_line_filled(uns proc_id, Addr line_addr) {
+   if(!PREF_UL1_ON) return;
   pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
