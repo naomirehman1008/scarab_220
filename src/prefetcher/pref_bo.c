@@ -73,7 +73,7 @@ void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
       PREF_BO_RR_TABLE_N, sizeof(BO_RR_Table_Entry));
     bo_hwp_core[proc_id].cur_offset = potentialBOs[0];
     bo_hwp_core[proc_id].offset_idx = 0;
-    // could play around with init on or off, prob won't have that much perf impact
+    // If we don't start with prefetches
     bo_hwp_core[proc_id].throttle = FALSE;
 
   }
@@ -134,6 +134,7 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
   // Test current offset
   Addr candidateLine = line_addr - bestoffset_hwp->train_offset;
   if (pref_bo_access_rr(bestoffset_hwp, candidateLine)) {
+    STAT_EVENT(proc_id, PREF_BO_RR_TABLE_HIT);
     // if found increment score
     int * score = hash_table_access(bestoffset_hwp->score_table, bestoffset_hwp->train_offset);
     (*score)++;
@@ -143,6 +144,9 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
       bestoffset_hwp->cur_offset = bestoffset_hwp->train_offset;
       bestoffset_hwp->new_phase = TRUE;
     }
+  }
+  else {
+    STAT_EVENT(proc_id, PREF_BO_RR_TABLE_MISS);
   }
   // if we haven't crossed max score but we've reached the max rounds find best offset
   if(bestoffset_hwp->new_phase == FALSE && bestoffset_hwp->round >= PREF_BO_MAX_ROUNDS) {
@@ -168,7 +172,7 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
 
   bestoffset_hwp->offset_idx = (bestoffset_hwp->offset_idx + 1) % POTENTIAL_BOS_SIZE;
   bestoffset_hwp->train_offset = potentialBOs[bestoffset_hwp->offset_idx];
-  if(bestoffset_hwp->offset_idx + 1 == POTENTIAL_BOS_SIZE) {
+  if(bestoffset_hwp->offset_idx == 0) {
     bestoffset_hwp->round++;
   }
 }
@@ -177,34 +181,46 @@ void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_uml
   if(bestoffset_hwp->throttle)
     return;
   STAT_EVENT(proc_id, BO_PREF_EMITTED);
-  if(is_umlc)
-    pref_addto_umlc_req_queue(proc_id, (line_addr >> DCACHE_LINE_SIZE) + bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
-  else
-    pref_addto_ul1req_queue(proc_id, (line_addr >> DCACHE_LINE_SIZE) + bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
+  if(is_umlc){
+    for (int ii=0; ii<PREF_BO_DEGREE; ii++){
+      pref_addto_umlc_req_queue(proc_id, (line_addr >> DCACHE_LINE_SIZE) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
+    }
+  }
+  else{
+    for (int ii=0; ii<PREF_BO_DEGREE; ii++){
+      pref_addto_ul1req_queue(proc_id, (line_addr >> DCACHE_LINE_SIZE) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
+    }
+  }
 }
 
 // line inserted into recent requests when prefetched line is inserted into UMLC 
 // these are sus, test these
 void pref_bo_umlc_pref_line_filled(uns proc_id, Addr line_addr) {
   if(!PREF_UMLC_ON) return;
+  STAT_EVENT(proc_id, PREF_BO_RR_TABLE_INSERT);
   pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 void pref_bo_ul1_pref_line_filled(uns proc_id, Addr line_addr) {
    if(!PREF_UL1_ON) return;
+   STAT_EVENT(proc_id, PREF_BO_RR_TABLE_INSERT);
   pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
 void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr) {
-  Addr rr_idx = ((line_addr - bestoffset_hwp->cur_offset) >> LOG2(DCACHE_LINE_SIZE)) % PREF_BO_RR_TABLE_N;
-  bestoffset_hwp->rr_table[rr_idx].line_addr = line_addr;
+  Addr base_addr = (line_addr - bestoffset_hwp->cur_offset) >> LOG2(DCACHE_LINE_SIZE);
+  Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
+  Addr tag = base_addr & 0x00000000ffffffff;
+  bestoffset_hwp->rr_table[rr_idx].line_addr = tag;
   bestoffset_hwp->rr_table[rr_idx].cycle_accessed = cycle_count;
   bestoffset_hwp->rr_table[rr_idx].valid = TRUE;
 }
 
 Flag pref_bo_access_rr(Pref_BO * bestoffset_hwp, Addr line_addr) {
-  Addr rr_idx = ((line_addr - bestoffset_hwp->cur_offset) >> LOG2(DCACHE_LINE_SIZE)) % PREF_BO_RR_TABLE_N;
-  if (bestoffset_hwp->rr_table[rr_idx].line_addr == line_addr &&bestoffset_hwp->rr_table[rr_idx].valid)
+  Addr base_addr = (line_addr - bestoffset_hwp->cur_offset) >> LOG2(DCACHE_LINE_SIZE);
+  Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
+  Addr tag = base_addr & 0x00000000ffffffff;
+  if (bestoffset_hwp->rr_table[rr_idx].line_addr == tag && bestoffset_hwp->rr_table[rr_idx].valid)
     return TRUE;
   return FALSE;
 }

@@ -6,7 +6,10 @@ DEF_PARAM(pref_bo_score_table_n,PREF_BO_SCORE_TABLE_N,  uns,    uns,    52,)
 DEF_PARAM(pref_bo_max_rounds,   PREF_BO_MAX_ROUNDS,     uns,    uns,    10,)
 DEF_PARAM(pref_bo_max_score,    PREF_BO_MAX_SCORE,      uns,    uns,    10,)
 DEF_PARAM(pref_bo_bad_score,    PREF_BO_BAD_SCORE,      uns,    uns,    5,)
-
+// number of prefetches emitted at a time
+// paper uses 1
+DEF_PARAM(pref_bo_degree,       PREF_BO_DEGREE,         uns,    uns,    1,)
+//UNIMPEMENTED
 // parameters for L0D prefetcher
 DEF_PARAM(pref_bo_l0d_pref_stream, PREF_BO_L0D_PREF_STREAM, Flag, Flag, TRUE, )
 // default stream delta 1
