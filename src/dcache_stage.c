@@ -55,6 +55,7 @@
 /* Macros */
 
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_DCACHE_STAGE, ##args)
+#define DEBUG_BO(proc_id, args...) _DEBUG(proc_id, DEBUG_BO, ##args)
 #define STAGE_MAX_OP_COUNT NUM_FUS
 
 
@@ -315,7 +316,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
         wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
       }
     } else if(line) {  // data cache hit
-
+      DEBUG_BO(dc->proc_id, "dcache hit line: %llu\n", line_addr);
       if(PREF_FRAMEWORK_ON &&  // if framework is on use new prefetcher.
                                // otherwise old one
          (PREF_UPDATE_ON_WRONGPATH || !op->off_path)) {

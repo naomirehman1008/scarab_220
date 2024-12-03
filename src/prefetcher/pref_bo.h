@@ -1,6 +1,10 @@
 #ifndef __PREF_BO__
 #define __PREF_BO__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "globals/global_types.h"
 #include "pref_common.h"
 
@@ -86,4 +90,8 @@ Flag pref_bo_access_rr(Pref_BO * bestoffset_hwp, Addr line_addr);
 
 /*************************************************************/
 /* Misc functions */
+
+#ifdef __cplusplus
+}
+#endif
 #endif

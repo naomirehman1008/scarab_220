@@ -1232,6 +1232,7 @@ Flag mem_process_mlc_hit_access(Mem_Req* req, Mem_Queue_Entry* mlc_queue_entry,
 
     if((req->type == MRT_DFETCH) || (req->type == MRT_DSTORE) ||
        (req->type == MRT_IFETCH)) {
+        
       STAT_EVENT(req->proc_id, MLC_HIT);
       STAT_EVENT(req->proc_id, CORE_MLC_HIT);
       STAT_EVENT(req->proc_id, MLC_HIT_ONPATH + req->off_path);
