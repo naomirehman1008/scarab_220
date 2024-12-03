@@ -69,6 +69,8 @@
 /* Macros */
 
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_MEMORY, ##args)
+#define DEBUG_BO(proc_id, args...) _DEBUG(proc_id, DEBUG_BO, ##args)
+
 #define BANK_HASH(a, num, int, shift) \
   ((a) >> (LOG2(int) + LOG2(num) + shift) & N_BIT_MASK(LOG2(num)))
 
@@ -2506,8 +2508,7 @@ static void mem_process_l1_fill_reqs() {
             (long int)(req - mem->req_buffer), Mem_Req_Type_str(req->type),
             hexstr64s(req->addr), req->size, mem_req_state_names[req->state]);
       if(l1_fill_line(req)) {
-        if(req->type == MRT_DPRF && PREF_BO_ON)
-          pref_bo_ul1_pref_line_filled(req->proc_id, req->addr);
+        
         ASSERT(0, req->type != MRT_WB && req->type != MRT_WB_NODIRTY);
         if(CONSTANT_MEMORY_LATENCY)
           perf_pred_mem_req_done(req);
@@ -2620,8 +2621,6 @@ static void mem_process_mlc_fill_reqs() {
             (long int)(req - mem->req_buffer), Mem_Req_Type_str(req->type),
             hexstr64s(req->addr), req->size, mem_req_state_names[req->state]);
       if(mlc_fill_line(req)) {
-        if(req->type == MRT_DPRF && PREF_BO_ON)
-          pref_bo_umlc_pref_line_filled(req->proc_id, req->addr);
         req->state     = MRS_FILL_DONE;
         req->rdy_cycle = cycle_count + 1;
       }
@@ -4732,7 +4731,10 @@ Flag l1_fill_line(Mem_Req* req) {
 
   // this is just a stat collection
   wp_process_l1_fill(data, req);
-
+  //L1 Fill Line
+  if(req->type == MRT_DPRF && PREF_BO_ON){
+    pref_bo_ul1_pref_line_filled(req->proc_id, req->addr);
+  }
   return SUCCESS;
 }
 
@@ -4966,7 +4968,8 @@ Flag mlc_fill_line(Mem_Req* req) {
   ASSERT(req->proc_id, req->mlc_miss);
 
   req->mlc_miss_cycle = MAX_CTR;
-
+  if(req->type == MRT_DPRF && PREF_BO_ON)
+    pref_bo_umlc_pref_line_filled(req->proc_id, req->addr);
   return SUCCESS;
 }
 

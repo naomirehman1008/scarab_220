@@ -46,6 +46,7 @@ int potentialBOs[] = {1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 25, 27
 //int POTENTIAL_BOS_SIZE = (int)PREF_BO_OFFSET_N; // should be 52
 
 std::set<Addr> RR_table_debug;
+std::set<Addr> trigger_prefetches;
 
 void pref_bo_init(HWP* hwp) {
   STAT_EVENT(0, BO_PREF_INIT);
@@ -202,6 +203,7 @@ void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_uml
   if(bestoffset_hwp->throttle)
     return;
   STAT_EVENT(proc_id, BO_PREF_EMITTED);
+  trigger_prefetches.insert((line_addr >> DCACHE_LINE_SIZE) & 0x00000000ffffffff);
   if(is_umlc){
     for (int ii=0; ii<(int)PREF_BO_DEGREE; ii++){
       pref_addto_umlc_req_queue(proc_id, (line_addr >> DCACHE_LINE_SIZE) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
@@ -233,6 +235,8 @@ void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr) {
   Addr base_addr = ((line_addr) >> LOG2(DCACHE_LINE_SIZE)) - bestoffset_hwp->cur_offset;
   Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
   Addr tag = base_addr & 0x00000000ffffffff;
+  if(trigger_prefetches.count(tag) > 0)
+    STAT_EVENT(0, PREF_BO_RR_INSERT_MATCHED_PREF);
   bestoffset_hwp->rr_table[rr_idx].line_addr = tag;
   bestoffset_hwp->rr_table[rr_idx].cycle_accessed = cycle_count;
   bestoffset_hwp->rr_table[rr_idx].valid = TRUE;
@@ -242,7 +246,7 @@ void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr) {
 
 Flag pref_bo_access_rr(Pref_BO * bestoffset_hwp, Addr line_addr) {
   Addr base_addr = ((line_addr) >> LOG2(DCACHE_LINE_SIZE)) - bestoffset_hwp->train_offset;
-  Addr base_addr = (line_addr) >> LOG2(DCACHE_LINE_SIZE);
+  //Addr base_addr = (line_addr) >> LOG2(DCACHE_LINE_SIZE);
   Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
   Addr tag = base_addr & 0x00000000ffffffff;
   DEBUG(0, "Lookup addr: %llu, tag: %llu\n", base_addr, tag);
