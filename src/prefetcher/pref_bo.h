@@ -13,6 +13,8 @@ extern "C" {
 #define GET_INDEX(addr, num_entries) addr % num_entries
 #define GET_TAG(addr, num_entries, mask) (addr / num_entries) & mask
 
+typedef struct BO_Bloom_Filter_struct BO_Bloom_Filter;
+
 typedef struct BO_Table_Entry_Struct {
   Flag trained;
   Flag valid;
@@ -50,6 +52,8 @@ typedef struct BO_Struct {
   int                     cur_offset; // what round are we using currently
   int                     offset_idx;
   Flag                    throttle;
+  BO_Bloom_Filter *       bloom_array;
+  BO_Bloom_Filter *       cur_bloom;
 } Pref_BO;
 
 typedef struct {
@@ -87,6 +91,7 @@ void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_uml
 void pref_bo_reset_scores(Pref_BO* bestoffset_hwp);
 void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr);
 Flag pref_bo_access_rr(Pref_BO * bestoffset_hwp, Addr line_addr);
+void pref_bo_insert_bloom(Pref_BO* bestoffset_hwp, Addr line_addr);
 
 /*************************************************************/
 /* Misc functions */
