@@ -117,7 +117,8 @@ void pref_bo_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
   if(!PREF_UMLC_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, proc_id);
-  
+  if(!PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
@@ -126,14 +127,16 @@ void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_h
   STAT_EVENT(proc_id, PREF_BO_ULMC_MISS);
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, proc_id);
-  pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
+  if(!PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 void pref_bo_umlc_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
   // to do
   if(!PREF_UMLC_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
-  pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
+  if(!PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 // UL1
@@ -142,17 +145,23 @@ void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
   if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, proc_id);
+  if(!PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
 void pref_bo_ul1_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
   if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, proc_id);
+  if(!PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
 void pref_bo_ul1_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
   if(!PREF_UL1_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr, FALSE, proc_id);
+  if(!PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
 void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
@@ -162,9 +171,10 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
     bestoffset_hwp->new_phase = FALSE;
     bestoffset_hwp->offset_idx = 0;
     bestoffset_hwp->round = 0;
-    //bestoffset_hwp->cur_bloom->bloom = bestoffset_hwp->bloom_array[offset_idx]->bloom;
     // reset score table
     pref_bo_reset_scores(bestoffset_hwp);
+    //this placement is a bit funky but works logically
+    bestoffset_hwp->phases_since_clear++;
   }
 
   // Test current offset
@@ -212,7 +222,7 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
     STAT_EVENT(proc_id, PREF_BO_OFFSET_USED_1 + offset_idx);
     bestoffset_hwp->cur_offset = best_offset;
     if(PREF_BO_BLOOM_FILTER)
-        //dereference to make sure copy happens?
+        //dereference to make sure copy happens
         (*bestoffset_hwp->cur_bloom->bloom) = (*bestoffset_hwp->bloom_array[bestoffset_hwp->offset_idx].bloom);
     if(best_score < (int)PREF_BO_BAD_SCORE) {
       STAT_EVENT(proc_id, PREF_BO_THROTTLE_BAD_SCORE);
@@ -261,13 +271,15 @@ void pref_bo_insert_bloom(Pref_BO* bestoffset_hwp, Addr line_addr) {
 void pref_bo_umlc_pref_line_filled(uns proc_id, Addr line_addr) {
   if(!PREF_UMLC_ON) return;
   //STAT_EVENT(proc_id, PREF_BO_RR_TABLE_INSERT);
-  //pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
+  if(PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr);
 }
 
 void pref_bo_ul1_pref_line_filled(uns proc_id, Addr line_addr) {
   if(!PREF_UL1_ON) return;
    //STAT_EVENT(proc_id, PREF_BO_RR_TABLE_INSERT);
-  //pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
+  if(PREF_BO_RR_UPDATE_PREF)
+    pref_bo_insert_to_rr_table(&bestoffset_prefetcher_array.bestoffset_hwp_core_ul1[proc_id], line_addr);
 }
 
 void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr) {
@@ -306,11 +318,12 @@ void pref_bo_reset_scores(Pref_BO* bestoffset_hwp) {
     score = (int*)hash_table_access_create(bestoffset_hwp->score_table, potentialBOs[ii], &new_entry);
     *score = 0;
     // clear bloom filters for new phase
-    // need to create a when assigning current bloom filter
-    if(PREF_BO_BLOOM_FILTER){
+    if(PREF_BO_BLOOM_FILTER && bestoffset_hwp->phases_since_clear >= PREF_BO_BLOOM_CLEAR_THRESHOLD){
       bestoffset_hwp->bloom_array[ii].bloom->clear();
     }
   }
+  if(PREF_BO_BLOOM_FILTER && bestoffset_hwp->phases_since_clear >= PREF_BO_BLOOM_CLEAR_THRESHOLD)
+    bestoffset_hwp->phases_since_clear = 0;
 }
 
 
