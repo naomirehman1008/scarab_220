@@ -36,6 +36,7 @@ extern "C" {
 
 #include <set>
 #include "libs/bloom_filter.hpp"
+#include <ostream>
 
 /**************************************************************************************/
 /* Macros */
@@ -190,7 +191,7 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
 
     // update bloom filter
     if(PREF_BO_BLOOM_FILTER)
-      pref_bo_insert_bloom(bestoffset_hwp, bestoffset_hwp->offset_idx);
+      pref_bo_insert_bloom(bestoffset_hwp, candidateLine);
 
     // if we reach maxscore use this as the new offset and start a new learning pphase
     if((*score) >= (int)PREF_BO_MAX_SCORE){
@@ -201,6 +202,7 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
       if(PREF_BO_BLOOM_FILTER)
         //dereference to make sure copy happens?
         (*bestoffset_hwp->cur_bloom->bloom) = (*bestoffset_hwp->bloom_array[bestoffset_hwp->offset_idx].bloom);
+
     }
   }
   else {
@@ -229,7 +231,7 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
     bestoffset_hwp->cur_offset = best_offset;
     if(PREF_BO_BLOOM_FILTER)
         //dereference to make sure copy happens
-        (*bestoffset_hwp->cur_bloom->bloom) = (*bestoffset_hwp->bloom_array[bestoffset_hwp->offset_idx].bloom);
+        (*bestoffset_hwp->cur_bloom->bloom) = (*bestoffset_hwp->bloom_array[offset_idx].bloom);
 
     if(best_score < (int)PREF_BO_BAD_SCORE) {
       STAT_EVENT(proc_id, PREF_BO_THROTTLE_BAD_SCORE);
@@ -250,8 +252,13 @@ void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_uml
     return;
   // check if the line is in the bloom filter, if its not then don't prefetch
   if(PREF_BO_BLOOM_FILTER){
-    if(!bestoffset_hwp->cur_bloom->bloom->contains(line_addr))
+    if(!bestoffset_hwp->cur_bloom->bloom->contains(line_addr)){
+      STAT_EVENT(proc_id, PREF_BO_BLOOM_PREF_THROTTLED);
       return;
+    }
+    else {
+      STAT_EVENT(proc_id, PREF_BO_BLOOM_PREF_EMITTED);
+    }
   }
   trigger_prefetches.insert((line_addr >> DCACHE_LINE_SIZE) & 0x00000000ffffffff);
   if(is_umlc){
@@ -330,6 +337,8 @@ void pref_bo_reset_scores(Pref_BO* bestoffset_hwp) {
       bestoffset_hwp->bloom_array[ii].bloom->clear();
     }
   }
-  if(PREF_BO_BLOOM_FILTER && bestoffset_hwp->phases_since_clear >= PREF_BO_BLOOM_CLEAR_THRESHOLD)
+  if(PREF_BO_BLOOM_FILTER && bestoffset_hwp->phases_since_clear >= PREF_BO_BLOOM_CLEAR_THRESHOLD){
     bestoffset_hwp->phases_since_clear = 0;
+    STAT_EVENT(0, PREF_BO_BLOOM_FILTER_CLEARED);
+  }
 }

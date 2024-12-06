@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <bitset>
 
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 
@@ -243,6 +244,18 @@ public:
 
       return *this;
    }
+
+   friend std::ostream& operator<<(std::ostream& os, const bloom_filter& f) {
+      os << "BLOOM STATE: ";
+      for (std::size_t i = 0; i < f.bit_table_.size(); i++) {
+         os << "bit";
+         std::bitset<8> binary(f.bit_table_[i]);
+         os << binary;
+
+      }
+        os << std::endl;
+        return os;
+    }
 
    virtual ~bloom_filter()
    {}
