@@ -93,12 +93,13 @@ void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
   
     bo_hwp_core[proc_id].rr_table = (BO_RR_Table_Entry*)calloc(
       PREF_BO_RR_TABLE_N, sizeof(BO_RR_Table_Entry));
+
     bo_hwp_core[proc_id].cur_offset = potentialBOs[0];
     bo_hwp_core[proc_id].offset_idx = 0;
-    // If we don't start with prefetches
+    // 
     bo_hwp_core[proc_id].throttle = FALSE;
-    bloom_parameters bloom_params;
     // bloom filter stuff
+    bloom_parameters bloom_params;
     bloom_params.projected_element_count = PREF_BO_BLOOM_ENTRIES;
     bloom_params.false_positive_probability = PREF_BO_FALSE_POSITIVE_PROB;
     bloom_params.compute_optimal_parameters();
@@ -108,6 +109,7 @@ void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
     }
     bo_hwp_core[proc_id].cur_bloom = (BO_Bloom_Filter*)calloc(1, sizeof(BO_Bloom_Filter));
     bo_hwp_core[proc_id].cur_bloom->bloom = new bloom_filter(bloom_params);
+    bo_hwp_core[proc_id].phases_since_clear = 0;
   }
 }
 
@@ -124,7 +126,6 @@ void pref_bo_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
 void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
   // to do
   if(!PREF_UMLC_ON) return;
-  STAT_EVENT(proc_id, PREF_BO_ULMC_MISS);
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, proc_id);
   if(!PREF_BO_RR_UPDATE_PREF)
@@ -287,6 +288,7 @@ void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr) {
   Addr base_addr = ((line_addr) >> LOG2(DCACHE_LINE_SIZE)) - bestoffset_hwp->cur_offset;
   Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
   Addr tag = base_addr & 0x00000000ffffffff;
+  // FOR DEBUGGING
   if(trigger_prefetches.count(tag) > 0)
     STAT_EVENT(0, PREF_BO_RR_INSERT_MATCHED_PREF);
   bestoffset_hwp->rr_table[rr_idx].line_addr = tag;
@@ -304,6 +306,7 @@ Flag pref_bo_access_rr(Pref_BO * bestoffset_hwp, Addr line_addr) {
   Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
   Addr tag = base_addr & 0x00000000ffffffff;
   DEBUG(0, "Lookup addr: %llu, tag: %llu\n", base_addr, tag);
+  // FOR DEBUGGING
   if(RR_table_debug.count(tag))
     STAT_EVENT(0, PREF_BO_RR_ADDR_SEEN);
   if (bestoffset_hwp->rr_table[rr_idx].line_addr == tag && bestoffset_hwp->rr_table[rr_idx].valid)
@@ -325,8 +328,3 @@ void pref_bo_reset_scores(Pref_BO* bestoffset_hwp) {
   if(PREF_BO_BLOOM_FILTER && bestoffset_hwp->phases_since_clear >= PREF_BO_BLOOM_CLEAR_THRESHOLD)
     bestoffset_hwp->phases_since_clear = 0;
 }
-
-
-
-
-

@@ -54,6 +54,7 @@ typedef struct BO_Struct {
   Flag                    throttle;
   BO_Bloom_Filter *       bloom_array;
   BO_Bloom_Filter *       cur_bloom;
+  uns                     phases_since_clear;
 } Pref_BO;
 
 typedef struct {
