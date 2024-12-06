@@ -141,6 +141,7 @@ void pref_bo_umlc_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hi
 }
 
 // UL1
+// NOT CALLED??
 void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist) {
   if(!PREF_UL1_ON) return;
@@ -167,7 +168,7 @@ void pref_bo_ul1_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_his
 
 void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
   // Train score table
-  // reset scores
+  // If entering a new phase reset score table
   if (bestoffset_hwp->new_phase) {
     bestoffset_hwp->new_phase = FALSE;
     bestoffset_hwp->offset_idx = 0;
@@ -182,13 +183,16 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
   Addr candidateLine = line_addr;
   if (pref_bo_access_rr(bestoffset_hwp, candidateLine)) {
     STAT_EVENT(proc_id, PREF_BO_RR_TABLE_HIT);
-    // if found increment score
     STAT_EVENT(proc_id, PREF_BO_OFFSET_INCED_1 + bestoffset_hwp->offset_idx);
+
     int * score = (int*) hash_table_access(bestoffset_hwp->score_table, bestoffset_hwp->train_offset);
     (*score)++;
-    // if we reach maxscore use this as the new offset and start a new learning pphase
+
+    // update bloom filter
     if(PREF_BO_BLOOM_FILTER)
       pref_bo_insert_bloom(bestoffset_hwp, bestoffset_hwp->offset_idx);
+
+    // if we reach maxscore use this as the new offset and start a new learning pphase
     if((*score) >= (int)PREF_BO_MAX_SCORE){
       STAT_EVENT(proc_id, PREF_BO_END_ROUND_MAX_SCORE);
       bestoffset_hwp->cur_offset = bestoffset_hwp->train_offset;
@@ -221,16 +225,19 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
       }
     }
     STAT_EVENT(proc_id, PREF_BO_OFFSET_USED_1 + offset_idx);
+
     bestoffset_hwp->cur_offset = best_offset;
     if(PREF_BO_BLOOM_FILTER)
         //dereference to make sure copy happens
         (*bestoffset_hwp->cur_bloom->bloom) = (*bestoffset_hwp->bloom_array[bestoffset_hwp->offset_idx].bloom);
+
     if(best_score < (int)PREF_BO_BAD_SCORE) {
       STAT_EVENT(proc_id, PREF_BO_THROTTLE_BAD_SCORE);
       bestoffset_hwp->throttle = TRUE;
     }
   }
 
+  // set next train offset
   bestoffset_hwp->offset_idx = (bestoffset_hwp->offset_idx + 1) % (int)PREF_BO_OFFSET_N;
   bestoffset_hwp->train_offset = potentialBOs[bestoffset_hwp->offset_idx];
   if(bestoffset_hwp->offset_idx == 0) {
@@ -246,23 +253,21 @@ void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_uml
     if(!bestoffset_hwp->cur_bloom->bloom->contains(line_addr))
       return;
   }
-  STAT_EVENT(proc_id, BO_PREF_EMITTED);
   trigger_prefetches.insert((line_addr >> DCACHE_LINE_SIZE) & 0x00000000ffffffff);
   if(is_umlc){
     for (int ii=0; ii<(int)PREF_BO_DEGREE; ii++){
-      pref_addto_umlc_req_queue(proc_id, (line_addr >> DCACHE_LINE_SIZE) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
+      // log 2???
+      pref_addto_umlc_req_queue(proc_id, (line_addr >> LOG2(DCACHE_LINE_SIZE)) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
     }
   }
   else{
     for (int ii=0; ii<(int)PREF_BO_DEGREE; ii++){
-      pref_addto_ul1req_queue(proc_id, (line_addr >> DCACHE_LINE_SIZE) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
+      pref_addto_ul1req_queue(proc_id, (line_addr >> LOG2(DCACHE_LINE_SIZE)) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
     }
   }
+  STAT_EVENT(proc_id, BO_PREF_EMITTED);
 }
 
-// this introduces the question how many entries should we have in the bloom filter to throttle
-// if we get only ~5 or so should we still throttle? or would bad_score already throttle
-// Ya bad score would already throttle this, so the implementation would be more sensetive to bad-score param
 void pref_bo_insert_bloom(Pref_BO* bestoffset_hwp, Addr line_addr) {
   bestoffset_hwp->bloom_array[bestoffset_hwp->offset_idx].bloom->insert(line_addr);
 }
