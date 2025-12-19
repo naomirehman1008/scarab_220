@@ -10,9 +10,6 @@ extern "C" {
 
 #include "../libs/hash_lib.h"
 
-#define GET_INDEX(addr, num_entries) addr % num_entries
-#define GET_TAG(addr, num_entries, mask) (addr / num_entries) & mask
-
 typedef struct Next_N_Struct {
   HWP_Info*               hwp_info;
   // static stuff

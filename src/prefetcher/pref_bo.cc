@@ -28,8 +28,6 @@ extern "C" {
 #include "prefetcher/pref_common.h"
 #include "statistics.h"
 
-#include "../libs/hash_lib.h"
-
 #ifdef __cplusplus
 }
 #endif
@@ -42,36 +40,27 @@ extern "C" {
 /* Macros */
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_BO, ##args)
 
-/* bloom filter stuff */
-// need an array of bloom filters, one for each offset
-// for 'inference' use the bloom filter with the highest score
-// below way too much HW complexity
-// OR index the offsets by the bloom filter
-// check which index it matches, then use that offset
 typedef struct BO_Bloom_Filter_struct {
   bloom_filter* bloom;
 } BO_Bloom_Filter;
 bestoffset_prefetchers bestoffset_prefetcher_array;
 
 int potentialBOs[] = {1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 25, 27, 30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80, 81, 90, 96, 100, 108, 120, 125, 128, 135, 144, 150, 160, 162, 180, 192, 200, 216, 225, 240, 243, 250, 256};
-//int POTENTIAL_BOS_SIZE = (int)PREF_BO_OFFSET_N; // should be 52
 
 std::set<Addr> RR_table_debug;
 std::set<Addr> trigger_prefetches;
 
 void pref_bo_init(HWP* hwp) {
   STAT_EVENT(0, BO_PREF_INIT);
-  if(!PREF_BO_ON) 
+  if(!PREF_BO_ON)
     return;
 
-  // no prefetchers prefetch to the dcache??
   hwp->hwp_info->enabled = TRUE;
   if(PREF_UMLC_ON) {
     bestoffset_prefetcher_array.bestoffset_hwp_core_umlc        = (Pref_BO*)malloc(sizeof(Pref_BO) * NUM_CORES);
     bestoffset_prefetcher_array.bestoffset_hwp_core_umlc->type  = UMLC;
     init_bo_core(hwp, bestoffset_prefetcher_array.bestoffset_hwp_core_umlc);
   }
-  // I don't think we're prefetching to the UL1?
   if(PREF_UL1_ON){
     bestoffset_prefetcher_array.bestoffset_hwp_core_ul1        = (Pref_BO*)malloc(sizeof(Pref_BO) * NUM_CORES);
     bestoffset_prefetcher_array.bestoffset_hwp_core_ul1->type  = UL1;
@@ -97,9 +86,7 @@ void init_bo_core(HWP* hwp, Pref_BO* bo_hwp_core) {
 
     bo_hwp_core[proc_id].cur_offset = potentialBOs[0];
     bo_hwp_core[proc_id].offset_idx = 0;
-    // 
     bo_hwp_core[proc_id].throttle = FALSE;
-    // bloom filter stuff
     bloom_parameters bloom_params;
     bloom_params.projected_element_count = PREF_BO_BLOOM_ENTRIES;
     bloom_params.false_positive_probability = PREF_BO_FALSE_POSITIVE_PROB;
@@ -125,7 +112,6 @@ void pref_bo_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
 }
 
 void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
-  // to do
   if(!PREF_UMLC_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
   pref_bo_train(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, proc_id);
@@ -134,7 +120,6 @@ void pref_bo_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_h
 }
 
 void pref_bo_umlc_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
-  // to do
   if(!PREF_UMLC_ON) return;
   pref_bo_emit_prefetch(&bestoffset_prefetcher_array.bestoffset_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
   if(!PREF_BO_RR_UPDATE_PREF)
@@ -142,7 +127,6 @@ void pref_bo_umlc_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hi
 }
 
 // UL1
-// NOT CALLED??
 void pref_bo_ul1_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
                         uns32 global_hist) {
   if(!PREF_UL1_ON) return;
@@ -174,9 +158,7 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
     bestoffset_hwp->new_phase = FALSE;
     bestoffset_hwp->offset_idx = 0;
     bestoffset_hwp->round = 0;
-    // reset score table
     pref_bo_reset_scores(bestoffset_hwp);
-    //this placement is a bit funky but works logically
     bestoffset_hwp->phases_since_clear++;
   }
 
@@ -193,14 +175,13 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
     if(PREF_BO_BLOOM_FILTER)
       pref_bo_insert_bloom(bestoffset_hwp, candidateLine);
 
-    // if we reach maxscore use this as the new offset and start a new learning pphase
+    // if we reach maxscore use this as the new offset and start a new learning phase
     if((*score) >= (int)PREF_BO_MAX_SCORE){
       STAT_EVENT(proc_id, PREF_BO_END_ROUND_MAX_SCORE);
       bestoffset_hwp->cur_offset = bestoffset_hwp->train_offset;
       bestoffset_hwp->new_phase = TRUE;
       STAT_EVENT(proc_id, PREF_BO_OFFSET_USED_1 + bestoffset_hwp->offset_idx);
       if(PREF_BO_BLOOM_FILTER)
-        //dereference to make sure copy happens?
         (*bestoffset_hwp->cur_bloom->bloom) = (*bestoffset_hwp->bloom_array[bestoffset_hwp->offset_idx].bloom);
 
     }
@@ -230,7 +211,6 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
 
     bestoffset_hwp->cur_offset = best_offset;
     if(PREF_BO_BLOOM_FILTER)
-        //dereference to make sure copy happens
         (*bestoffset_hwp->cur_bloom->bloom) = (*bestoffset_hwp->bloom_array[offset_idx].bloom);
 
     if(best_score < (int)PREF_BO_BAD_SCORE) {
@@ -250,7 +230,6 @@ void pref_bo_train(Pref_BO* bestoffset_hwp, Addr line_addr, uns8 proc_id) {
 void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_umlc, uns8 proc_id) {
   if(bestoffset_hwp->throttle)
     return;
-  // check if the line is in the bloom filter, if its not then don't prefetch
   if(PREF_BO_BLOOM_FILTER){
     if(!bestoffset_hwp->cur_bloom->bloom->contains(line_addr)){
       STAT_EVENT(proc_id, PREF_BO_BLOOM_PREF_THROTTLED);
@@ -263,7 +242,6 @@ void pref_bo_emit_prefetch(Pref_BO * bestoffset_hwp, Addr line_addr, Flag is_uml
   trigger_prefetches.insert((line_addr >> DCACHE_LINE_SIZE) & 0x00000000ffffffff);
   if(is_umlc){
     for (int ii=0; ii<(int)PREF_BO_DEGREE; ii++){
-      // log 2???
       pref_addto_umlc_req_queue(proc_id, (line_addr >> LOG2(DCACHE_LINE_SIZE)) + (ii + 1) * bestoffset_hwp->cur_offset, bestoffset_hwp->hwp_info->id);
     }
   }
@@ -279,8 +257,6 @@ void pref_bo_insert_bloom(Pref_BO* bestoffset_hwp, Addr line_addr) {
   bestoffset_hwp->bloom_array[bestoffset_hwp->offset_idx].bloom->insert(line_addr);
 }
 
-// line inserted into recent requests when prefetched line is inserted into UMLC 
-// these are sus, test these
 void pref_bo_umlc_pref_line_filled(uns proc_id, Addr line_addr) {
   if(!PREF_UMLC_ON) return;
   //STAT_EVENT(proc_id, PREF_BO_RR_TABLE_INSERT);
@@ -296,29 +272,24 @@ void pref_bo_ul1_pref_line_filled(uns proc_id, Addr line_addr) {
 }
 
 void pref_bo_insert_to_rr_table(Pref_BO * bestoffset_hwp, Addr line_addr) {
-  //Addr base_addr = ((line_addr) >> LOG2(DCACHE_LINE_SIZE)) - bestoffset_hwp->cur_offset;
   Addr base_addr = ((line_addr) >> LOG2(DCACHE_LINE_SIZE)) - bestoffset_hwp->cur_offset;
   Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
   Addr tag = base_addr & 0x00000000ffffffff;
-  // FOR DEBUGGING
   if(trigger_prefetches.count(tag) > 0)
     STAT_EVENT(0, PREF_BO_RR_INSERT_MATCHED_PREF);
   bestoffset_hwp->rr_table[rr_idx].line_addr = tag;
   bestoffset_hwp->rr_table[rr_idx].cycle_accessed = cycle_count;
   bestoffset_hwp->rr_table[rr_idx].valid = TRUE;
   RR_table_debug.insert(tag);
-  // not correct but we only ever run with one core anyway
   STAT_EVENT(0, PREF_BO_RR_TABLE_INSERT);
   DEBUG(0, "Inserted addr: %llu, tag: %llu\n", base_addr, tag);
 }
 
 Flag pref_bo_access_rr(Pref_BO * bestoffset_hwp, Addr line_addr) {
   Addr base_addr = ((line_addr) >> LOG2(DCACHE_LINE_SIZE)) - bestoffset_hwp->train_offset;
-  //Addr base_addr = (line_addr) >> LOG2(DCACHE_LINE_SIZE);
   Addr rr_idx = (base_addr) % PREF_BO_RR_TABLE_N;
   Addr tag = base_addr & 0x00000000ffffffff;
   DEBUG(0, "Lookup addr: %llu, tag: %llu\n", base_addr, tag);
-  // FOR DEBUGGING
   if(RR_table_debug.count(tag))
     STAT_EVENT(0, PREF_BO_RR_ADDR_SEEN);
   if (bestoffset_hwp->rr_table[rr_idx].line_addr == tag && bestoffset_hwp->rr_table[rr_idx].valid)

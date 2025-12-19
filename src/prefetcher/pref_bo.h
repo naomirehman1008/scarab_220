@@ -10,29 +10,9 @@ extern "C" {
 
 #include "../libs/hash_lib.h"
 
-#define GET_INDEX(addr, num_entries) addr % num_entries
-#define GET_TAG(addr, num_entries, mask) (addr / num_entries) & mask
-
 typedef struct BO_Bloom_Filter_struct BO_Bloom_Filter;
 
-typedef struct BO_Table_Entry_Struct {
-  Flag trained;
-  Flag valid;
-
-  Addr last_addr;
-  Addr load_addr;
-  Addr start_index;
-  Addr pref_last_index;
-  int  stride;
-
-  Counter train_num;
-  Counter pref_sent;
-  Counter last_access;  // for lru
-} BO_Table_Entry;
-
-// may need more?
 typedef struct BO_RR_Table_Entry_Struct {
-  //maybe just to tag?
   Addr line_addr;
   Counter cycle_accessed;
   Flag valid;

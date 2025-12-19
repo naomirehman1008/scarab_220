@@ -28,8 +28,6 @@ extern "C" {
 #include "prefetcher/pref_common.h"
 #include "statistics.h"
 
-#include "../libs/hash_lib.h"
-
 #ifdef __cplusplus
 }
 #endif
@@ -43,17 +41,15 @@ next_n_prefetchers next_n_prefetcher_array;
 
 void pref_next_n_init(HWP* hwp) {
   STAT_EVENT(0, BO_PREF_INIT);
-  if(!PREF_NEXT_N_ON) 
+  if(!PREF_NEXT_N_ON)
     return;
 
-  // no prefetchers prefetch to the dcache??
   hwp->hwp_info->enabled = TRUE;
   if(PREF_UMLC_ON) {
     next_n_prefetcher_array.next_n_hwp_core_umlc        = (Pref_Next_N*)malloc(sizeof(Pref_Next_N) * NUM_CORES);
     next_n_prefetcher_array.next_n_hwp_core_umlc->type  = UMLC;
     init_next_n_core(hwp, next_n_prefetcher_array.next_n_hwp_core_umlc);
   }
-  // I don't think we're prefetching to the UL1?
   if(PREF_UL1_ON){
     next_n_prefetcher_array.next_n_hwp_core_ul1        = (Pref_Next_N*)malloc(sizeof(Pref_Next_N) * NUM_CORES);
     next_n_prefetcher_array.next_n_hwp_core_ul1->type  = UL1;
@@ -78,13 +74,11 @@ void pref_next_n_umlc_pref_hit(uns8 proc_id, Addr line_addr, Addr load_PC,
 }
 
 void pref_next_n_umlc_miss(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
-  // to do
   if(!PREF_UMLC_ON) return;
   pref_next_n_emit_prefetch(&next_n_prefetcher_array.next_n_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
 }
 
 void pref_next_n_umlc_hit(uns8 proc_id, Addr line_addr, Addr loadPC, uns32 global_hist) {
-  // to do
   if(!PREF_UMLC_ON) return;
   pref_next_n_emit_prefetch(&next_n_prefetcher_array.next_n_hwp_core_umlc[proc_id], line_addr, TRUE, proc_id);
 }
@@ -121,8 +115,4 @@ void pref_next_n_emit_prefetch(Pref_Next_N * next_n_hwp, Addr line_addr, Flag is
     }
   }
 }
-
-
-
-
 
