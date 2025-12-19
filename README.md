@@ -1,3 +1,18 @@
+# CSE220 Final Project
+This fork contains the Naomi Rehman and Bruce Bai's final project for CSE220, an implementation of the Best Offset Prefetcher. 
+
+To run scarab with our prefetcher:
+```bash
+src/scarab --frontend memtrace --cbp_trace_r0=<MEMTRACE_FILE> --memtrace_modules_log=<MODULES_LOG_AND_BINARIES_DIR> --pref_bo_on 1 --pref_stream_on 0 --pref_umlc_on 1
+```
+
+We extended the BOP prefetcher with Bloom Filters to reduce cache pollution. Only addresses seen in the training phase using the chosen offset are prefetched. 
+
+To run with bloom filters enabled:
+```bash
+src/scarab --frontend memtrace --cbp_trace_r0=<MEMTRACE_FILE> --memtrace_modules_log=<MODULES_LOG_AND_BINARIES_DIR> --pref_bo_on 1 --pref_stream_on 0 --pref_umlc_on 1 --pref_bo_bloom_filter 1
+```
+
 # Scarab Quick Start Guide
 Install:
 1. Install exact PIN version ([PIN 3.15](https://www.intel.com/content/www/us/en/developer/articles/tool/pin-a-binary-instrumentation-tool-downloads.html))
